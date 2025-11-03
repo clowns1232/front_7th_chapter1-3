@@ -38,6 +38,7 @@ import {
 import { useSnackbar } from 'notistack';
 import { useState } from 'react';
 
+import DraggableCalendarEvent from './components/DraggableCalendarEvent.tsx';
 import RecurringEventDialog from './components/RecurringEventDialog.tsx';
 import { useCalendarView } from './hooks/useCalendarView.ts';
 import { useEventForm } from './hooks/useEventForm.ts';
@@ -105,6 +106,11 @@ const getRepeatTypeLabel = (type: RepeatType): string => {
       return '';
   }
 };
+
+const toDateInputString = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate()
+  ).padStart(2, '0')}`;
 
 function App() {
   const {
@@ -216,6 +222,42 @@ function App() {
     }
   };
 
+  const handleEventDragComplete = async (eventToMove: Event, newStart: Date) => {
+    const nextDate = toDateInputString(newStart);
+    if (eventToMove.date === nextDate) {
+      return;
+    }
+
+    const updatedEvent: Event = {
+      ...eventToMove,
+      date: nextDate,
+    };
+
+    const overlapping = findOverlappingEvents(updatedEvent, events);
+    if (overlapping.length > 0) {
+      enqueueSnackbar('다른 일정과 겹쳐 이동할 수 없습니다.', { variant: 'error' });
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/events/${eventToMove.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedEvent),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update event');
+      }
+
+      await fetchEvents();
+      enqueueSnackbar('일정이 이동되었습니다.', { variant: 'success' });
+    } catch (error) {
+      console.error('Error updating event via drag:', error);
+      enqueueSnackbar('일정 이동에 실패했습니다.', { variant: 'error' });
+    }
+  };
+
   const addOrUpdateEvent = async () => {
     if (!title || !date || !startTime || !endTime) {
       enqueueSnackbar('필수 정보를 모두 입력해주세요.', { variant: 'error' });
@@ -311,6 +353,7 @@ function App() {
                 {weekDates.map((date) => (
                   <TableCell
                     key={date.toISOString()}
+                    data-calendar-date={toDateInputString(date)}
                     sx={{
                       height: '120px',
                       verticalAlign: 'top',
@@ -332,34 +375,45 @@ function App() {
                         const isRepeating = event.repeat.type !== 'none';
 
                         return (
-                          <Box
+                          <DraggableCalendarEvent
                             key={event.id}
-                            sx={{
-                              ...eventBoxStyles.common,
-                              ...(isNotified ? eventBoxStyles.notified : eventBoxStyles.normal),
-                            }}
-                          >
-                            <Stack direction="row" spacing={1} alignItems="center">
-                              {isNotified && <Notifications fontSize="small" />}
-                              {/* ! TEST CASE */}
-                              {isRepeating && (
-                                <Tooltip
-                                  title={`${event.repeat.interval}${getRepeatTypeLabel(event.repeat.type)}마다 반복${
-                                    event.repeat.endDate ? ` (종료: ${event.repeat.endDate})` : ''
-                                  }`}
-                                >
-                                  <Repeat fontSize="small" />
-                                </Tooltip>
-                              )}
-                              <Typography
-                                variant="caption"
-                                noWrap
-                                sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}
-                              >
-                                {event.title}
-                              </Typography>
-                            </Stack>
-                          </Box>
+                            event={event}
+                            onDragComplete={handleEventDragComplete}
+                            sx={[
+                              eventBoxStyles.common,
+                              isNotified ? eventBoxStyles.notified : eventBoxStyles.normal,
+                            ]}
+                            render={({ isDragging }) => (
+                              <Stack spacing={0.5}>
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  {isNotified && <Notifications fontSize="small" />}
+                                  {/* ! TEST CASE */}
+                                  {isRepeating && (
+                                    <Tooltip
+                                      title={`${event.repeat.interval}${getRepeatTypeLabel(event.repeat.type)}마다 반복${
+                                        event.repeat.endDate
+                                          ? ` (종료: ${event.repeat.endDate})`
+                                          : ''
+                                      }`}
+                                    >
+                                      <Repeat fontSize="small" />
+                                    </Tooltip>
+                                  )}
+                                  <Typography
+                                    variant="caption"
+                                    noWrap
+                                    sx={{
+                                      fontSize: '0.75rem',
+                                      lineHeight: 1.2,
+                                      fontWeight: isDragging ? 'bold' : 'inherit',
+                                    }}
+                                  >
+                                    {event.title}
+                                  </Typography>
+                                </Stack>
+                              </Stack>
+                            )}
+                          />
                         );
                       })}
                   </TableCell>
@@ -399,6 +453,7 @@ function App() {
                     return (
                       <TableCell
                         key={dayIndex}
+                        data-calendar-date={day ? dateString : undefined}
                         sx={{
                           height: '120px',
                           verticalAlign: 'top',
@@ -424,43 +479,54 @@ function App() {
                               const isRepeating = event.repeat.type !== 'none';
 
                               return (
-                                <Box
+                                <DraggableCalendarEvent
                                   key={event.id}
-                                  sx={{
-                                    p: 0.5,
-                                    my: 0.5,
-                                    backgroundColor: isNotified ? '#ffebee' : '#f5f5f5',
-                                    borderRadius: 1,
-                                    fontWeight: isNotified ? 'bold' : 'normal',
-                                    color: isNotified ? '#d32f2f' : 'inherit',
-                                    minHeight: '18px',
-                                    width: '100%',
-                                    overflow: 'hidden',
-                                  }}
-                                >
-                                  <Stack direction="row" spacing={1} alignItems="center">
-                                    {isNotified && <Notifications fontSize="small" />}
-                                    {/* ! TEST CASE */}
-                                    {isRepeating && (
-                                      <Tooltip
-                                        title={`${event.repeat.interval}${getRepeatTypeLabel(event.repeat.type)}마다 반복${
-                                          event.repeat.endDate
-                                            ? ` (종료: ${event.repeat.endDate})`
-                                            : ''
-                                        }`}
-                                      >
-                                        <Repeat fontSize="small" />
-                                      </Tooltip>
-                                    )}
-                                    <Typography
-                                      variant="caption"
-                                      noWrap
-                                      sx={{ fontSize: '0.75rem', lineHeight: 1.2 }}
-                                    >
-                                      {event.title}
-                                    </Typography>
-                                  </Stack>
-                                </Box>
+                                  event={event}
+                                  onDragComplete={handleEventDragComplete}
+                                  sx={[
+                                    {
+                                      p: 0.5,
+                                      my: 0.5,
+                                      backgroundColor: isNotified ? '#ffebee' : '#f5f5f5',
+                                      borderRadius: 1,
+                                      fontWeight: isNotified ? 'bold' : 'normal',
+                                      color: isNotified ? '#d32f2f' : 'inherit',
+                                      minHeight: '18px',
+                                      width: '100%',
+                                      overflow: 'hidden',
+                                    },
+                                  ]}
+                                  render={({ isDragging }) => (
+                                    <Stack spacing={0.5}>
+                                      <Stack direction="row" spacing={1} alignItems="center">
+                                        {isNotified && <Notifications fontSize="small" />}
+                                        {/* ! TEST CASE */}
+                                        {isRepeating && (
+                                          <Tooltip
+                                            title={`${event.repeat.interval}${getRepeatTypeLabel(event.repeat.type)}마다 반복${
+                                              event.repeat.endDate
+                                                ? ` (종료: ${event.repeat.endDate})`
+                                                : ''
+                                            }`}
+                                          >
+                                            <Repeat fontSize="small" />
+                                          </Tooltip>
+                                        )}
+                                        <Typography
+                                          variant="caption"
+                                          noWrap
+                                          sx={{
+                                            fontSize: '0.75rem',
+                                            lineHeight: 1.2,
+                                            fontWeight: isDragging ? 'bold' : 'inherit',
+                                          }}
+                                        >
+                                          {event.title}
+                                        </Typography>
+                                      </Stack>
+                                    </Stack>
+                                  )}
+                                />
                               );
                             })}
                           </>
