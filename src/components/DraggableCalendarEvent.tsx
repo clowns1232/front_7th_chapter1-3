@@ -68,7 +68,12 @@ const DraggableCalendarEvent = ({
   const { ...restBoxProps } = boxProps ?? {};
 
   return (
-    <Box ref={dragRef} sx={combinedSx} {...restBoxProps}>
+    <Box
+      ref={dragRef}
+      sx={combinedSx}
+      onClick={(event) => event.stopPropagation()}
+      {...restBoxProps}
+    >
       {render({ isDragging, previewStart, previewEnd })}
     </Box>
   );

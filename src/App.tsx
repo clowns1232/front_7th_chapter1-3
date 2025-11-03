@@ -222,6 +222,11 @@ function App() {
     }
   };
 
+  const handleCalendarCellClick = (selectedDate: string | null) => {
+    if (!selectedDate) return;
+    setDate(selectedDate);
+  };
+
   const handleEventDragComplete = async (eventToMove: Event, newStart: Date) => {
     const nextDate = toDateInputString(newStart);
     if (eventToMove.date === nextDate) {
@@ -361,7 +366,9 @@ function App() {
                       padding: 1,
                       border: '1px solid #e0e0e0',
                       overflow: 'hidden',
+                      cursor: 'pointer',
                     }}
+                    onClick={() => handleCalendarCellClick(toDateInputString(date))}
                   >
                     <Typography variant="body2" fontWeight="bold">
                       {date.getDate()}
@@ -462,7 +469,9 @@ function App() {
                           border: '1px solid #e0e0e0',
                           overflow: 'hidden',
                           position: 'relative',
+                          cursor: day ? 'pointer' : 'default',
                         }}
+                        onClick={() => handleCalendarCellClick(day ? dateString : null)}
                       >
                         {day && (
                           <>
